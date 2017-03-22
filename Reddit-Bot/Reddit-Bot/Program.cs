@@ -10,6 +10,7 @@ namespace Reddit_Bot
     {
         static void Main(string[] args)
         {
+            new RedditBot();
         }
     }
 }
