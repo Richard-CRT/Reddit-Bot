@@ -53,6 +53,7 @@ namespace Reddit_Bot
             RedditSession RedditSession = new RedditSession(config);
             RedditSession.Authenticate();
             RedditSession.SendMessage("-", "This is a test subject message", "This is a message body");
+            //https://www.reddit.com/comments/.json?limit=1
         }
     }
 }
