@@ -120,7 +120,7 @@ namespace Reddit_Bot
                 List<JsonCommentsRequestContentBaseDataComment> newComments = RedditSession.GetNewComments(100);
                 foreach (JsonCommentsRequestContentBaseDataComment comment in newComments)
                 {
-                    Console.WriteLine(comment.data.created_utc + " - " + comment.data.body);
+                    Console.WriteLine(comment.data.created_utc + " - " + comment.data.name + " - " + comment.data.body);
                 }
                 Console.WriteLine("---");
                 Console.ReadLine();

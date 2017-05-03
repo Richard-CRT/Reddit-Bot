@@ -5,9 +5,33 @@ using System.Text;
 using System.Threading.Tasks;
 using RestSharp;
 using Newtonsoft.Json;
+using System.Xml.Serialization;
+using System.IO;
 
 namespace Reddit_Bot
 {
+    [XmlRoot("Data")]
+    public class Data
+    {
+        [XmlElement("CommentData")]
+        public CommentData CommentData;
+    }
+
+    public class CommentData
+    {
+        [XmlElement("LastScannedUTCValue")]
+        public double LastScannedUTCValue;
+
+        [XmlElement("TrackedCommentIDs")]
+        public TrackedCommentIDs TrackedCommentIDs;
+    }
+
+    public class TrackedCommentIDs
+    {
+        [XmlElement("ID")]
+        public List<string> ID;
+    }
+
     public class AccessTokenResponse
     {
         public string AccessToken { get; set; }
@@ -40,15 +64,32 @@ namespace Reddit_Bot
         private AccessToken RedditAccessToken;
         private RestClient RedditClient;
         private RestClient OauthRestClient;
+        private Data Data;
+        private XmlSerializer Serializer;
 
         private List<JsonCommentsRequestContentBaseDataComment> TrackedComments;
-        private double LastScannedUTCValue;
 
         public RedditSession(Configuration config)
         {
             Config = config;
-            LastScannedUTCValue = 0;
+
+            Serializer = new XmlSerializer(typeof(Data));
+
+            using (FileStream fileStream = new FileStream("data.xml", FileMode.Open))
+            {
+                Data = (Data)Serializer.Deserialize(fileStream);
+            }
+
             TrackedComments = new List<JsonCommentsRequestContentBaseDataComment>();
+
+            foreach (string CommentID in Data.CommentData.TrackedCommentIDs.ID)
+            {
+                JsonCommentsRequestContentBaseDataComment temp = new JsonCommentsRequestContentBaseDataComment();
+                temp.data = new JsonCommentsRequestContentBaseDataCommentData();
+                temp.data.name = CommentID;
+                temp.data.created_utc = Data.CommentData.LastScannedUTCValue;
+                TrackedComments.Add(temp);
+            }
 
             RedditClient = new RestClient("https://www.reddit.com");
             RedditClient.Authenticator = new RestSharp.Authenticators.HttpBasicAuthenticator(Config.AppDetails.Id, Config.AppDetails.Secret);
@@ -71,6 +112,22 @@ namespace Reddit_Bot
             AccessTokenResponse tokenResponse = intialTokenResponse.Data;
 
             RedditAccessToken = new AccessToken(tokenResponse.AccessToken);
+        }
+
+        public void UpdateDataFile()
+        {
+            // Store the comments that were tracked in the last scan so they can be removed if the bot is rebooted
+            List<string> newStoredTrackedCommentsList = new List<string>();
+            foreach (JsonCommentsRequestContentBaseDataComment comment in TrackedComments)
+            {
+                newStoredTrackedCommentsList.Add(comment.data.name);
+            }
+            Data.CommentData.TrackedCommentIDs.ID = newStoredTrackedCommentsList;
+
+            using (FileStream fileStream = new FileStream("data.xml", FileMode.Create))
+            {
+                Serializer.Serialize(fileStream, Data);
+            }
         }
 
         public List<JsonCommentsRequestContentBaseDataComment> GetNewComments(int maxComments = 100)
@@ -111,9 +168,11 @@ namespace Reddit_Bot
             TrackedComments.InsertRange(0,untrackedComments);
             if (untrackedComments.Count > 0)
             {
-                LastScannedUTCValue = untrackedComments[0].data.created_utc;
+                Data.CommentData.LastScannedUTCValue = untrackedComments[0].data.created_utc;
             }
             TrimTrackedComments();
+
+            UpdateDataFile();
 
             return untrackedComments;
         }
@@ -123,7 +182,7 @@ namespace Reddit_Bot
             List<JsonCommentsRequestContentBaseDataComment> unstrippedComments = new List<JsonCommentsRequestContentBaseDataComment>();
             for (int i = 0; i < jsonData.data.children.Count; i++)
             {
-                if (!jsonData.data.children[i].isOlderThan(LastScannedUTCValue))
+                if (!jsonData.data.children[i].isOlderThan(Data.CommentData.LastScannedUTCValue))
                 {
                     // Not older than our last tracked comment
                     // Check if already scanned
@@ -151,7 +210,7 @@ namespace Reddit_Bot
         {
             for (int i = 0; i < TrackedComments.Count;)
             {
-                if (TrackedComments[i].isOlderThan(LastScannedUTCValue))
+                if (TrackedComments[i].isOlderThan(Data.CommentData.LastScannedUTCValue))
                 {
                     TrackedComments.RemoveAt(i);
                 }
